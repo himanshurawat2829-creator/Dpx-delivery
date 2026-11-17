@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DPX Courier Delivery</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa}
+.d-none{display:none!important}
+nav.navbar{padding:14px 0;color:#fff}.navbar .container{display:flex;justify-content:space-between}
+.container{max-width:1000px;margin:0 auto;padding:0 12px}
+.nav-tabs{display:flex;list-style:none;padding:0;border-bottom:2px solid #ccd;gap:4px}
+.nav-link{display:block;padding:8px 14px;text-decoration:none;color:#205377}
+.nav-link.active{background:#3773B9;color:#fff;border-radius:4px 4px 0 0}
+table{width:100%;border-collapse:collapse;background:#fff}th,td{padding:6px 8px;border-bottom:1px solid #e3e6ea;text-align:left}
+th{background:#eef2f7}button{padding:4px 10px;margin:2px;cursor:pointer}
+.btn-primary,.btn-success{background:#3773B9;color:#fff;border:0;border-radius:3px}
+.row{display:flex;gap:12px;flex-wrap:wrap}.col-md-4{width:30%}input,select{padding:4px;width:95%}
+.card-body{background:#fff;padding:12px;border:1px solid #dde;margin-top:12px}
+.alert{padding:6px 10px;border-radius:3px;margin-bottom:6px}.alert-success{background:#dff3de}.alert-danger{background:#f8d7da}
+.d-flex{display:flex;align-items:center}.justify-content-between{justify-content:space-between}
+</style>
+</head><body class="bg-light">
+<nav class="navbar navbar-dark mb-3" style="background:#205377"><div class="container">
+<span class="navbar-brand fw-bold">DPX Courier Delivery</span><span id="stats" class="text-white small"></span></div></nav>
+<div class="container">
+<ul class="nav nav-tabs mb-3" id="tabs"></ul>
+<div class="d-flex justify-content-between mb-2"><h5 id="title"></h5><button class="btn btn-primary btn-sm" id="addBtn">+ Add</button></div>
+<div id="msg"></div>
+<table class="table table-sm table-striped bg-white"><thead id="head"></thead><tbody id="body"></tbody></table>
+<form id="form" class="card card-body mb-4 d-none"><div id="fields" class="row g-2"></div>
+<div class="mt-2"><button class="btn btn-success btn-sm">Save</button> <button type="button" class="btn btn-secondary btn-sm" id="cancel">Cancel</button></div></form>
+</div>
+<script>
+const T = {
+ customers:{label:'Customers',fields:[['name','text'],['phone','text'],['email','text']]},
+ couriers:{label:'Couriers',fields:[['name','text'],['vehicle','text'],['active','checkbox']]},
+ packages:{label:'Parcels',fields:[['customerId','number'],['description','text'],['weightKg','number']]},
+ deliveries:{label:'Deliveries',fields:[['parcelId','number'],['courierId','number'],['address','text'],['status','select']]},
+ history:{label:'Status history',fields:[],readonly:true}};
+const STATUS=['Pending','In Transit','Delivered','Cancelled'];
+let cur='customers', editId=null;
+const $=id=>document.getElementById(id);
+async function api(m,p,b){const r=await fetch('/api/'+p,{method:m,headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):undefined});
+ const j=await r.json(); if(!r.ok) throw new Error(j.error); return j;}
+function msg(t,ok){$('msg').innerHTML='<div class="alert alert-'+(ok?'success':'danger')+' py-1">'+t+'</div>';setTimeout(()=>$('msg').innerHTML='',3000);}
+function tabs(){$('tabs').innerHTML=Object.keys(T).map(k=>'<li class="nav-item"><a href="#" class="nav-link '+(k==cur?'active':'')+'" data-k="'+k+'">'+T[k].label+'</a></li>').join('');
+ document.querySelectorAll('#tabs a').forEach(a=>a.onclick=e=>{e.preventDefault();cur=a.dataset.k;closeForm();load();});}
+async function load(){tabs();$('title').textContent=T[cur].label;$('addBtn').style.display=T[cur].readonly?'none':'';
+ const rows=await api('GET',cur); const cols=rows.length?Object.keys(rows[0]):['id',...T[cur].fields.map(f=>f[0])];
+ $('head').innerHTML='<tr>'+cols.map(c=>'<th>'+c+'</th>').join('')+(T[cur].readonly?'':'<th></th>')+'</tr>';
+ $('body').innerHTML=rows.map(r=>'<tr>'+cols.map(c=>'<td>'+r[c]+'</td>').join('')+(T[cur].readonly?'':
+  '<td><button class="btn btn-outline-primary btn-sm" onclick="edit('+r.id+')">Edit</button> <button class="btn btn-outline-danger btn-sm" onclick="del('+r.id+')">Delete</button></td>')+'</tr>').join('');
+ const s=await api('GET','stats'); $('stats').textContent=s.deliveries+' deliveries | '+s.Pending+' pending | '+s['In Transit']+' in transit | '+s.Delivered+' delivered';}
+function openForm(v){$('form').classList.remove('d-none');
+ $('fields').innerHTML=T[cur].fields.filter(f=>!(f[0]=='status'&&editId==null)).map(([n,t])=>{
+  const val=v?v[n]:''; let inp;
+  if(t=='select') inp='<select class="form-select" name="'+n+'">'+STATUS.map(s=>'<option '+(s==val?'selected':'')+'>'+s+'</option>').join('')+'</select>';
+  else if(t=='checkbox') inp='<input type="checkbox" name="'+n+'" '+(v?(val?'checked':''):'checked')+'>';
+  else inp='<input class="form-control" type="'+t+'" step="any" name="'+n+'" value="'+(val??'')+'">';
+  return '<div class="col-md-4"><label class="form-label small">'+n+'</label><br>'+inp+'</div>';}).join('');}
+function closeForm(){$('form').classList.add('d-none');editId=null;}
+$('addBtn').onclick=()=>{editId=null;openForm(null);};
+$('cancel').onclick=closeForm;
+window.edit=async id=>{editId=id;openForm(await api('GET',cur+'/'+id));};
+window.del=async id=>{if(!confirm('Delete #'+id+'?'))return;try{await api('DELETE',cur+'/'+id);msg('Deleted',true);load();}catch(e){msg(e.message,false);}};
+$('form').onsubmit=async e=>{e.preventDefault();const b={};
+ T[cur].fields.forEach(([n,t])=>{const el=e.target.elements[n];if(!el)return;b[n]=t=='checkbox'?el.checked:t=='number'?(el.value===''?'':Number(el.value)):el.value;});
+ try{if(editId==null)await api('POST',cur,b);else await api('PUT',cur+'/'+editId,b);msg('Saved',true);closeForm();load();}catch(er){msg(er.message,false);}};
+load();
+</script></body></html>
